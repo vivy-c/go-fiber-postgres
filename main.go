@@ -20,6 +20,12 @@ type Book struct {
 	Publisher string `json:"publisher"`
 }
 
+type UpdateBookRequest struct {
+	Author    string `json:"author"`
+	Title     string `json:"title"`
+	Publisher string `json:"publisher"`
+}
+
 type Repository struct {
 	DB *gorm.DB
 }
@@ -115,12 +121,65 @@ func (r *Repository) GetBookByID(context *fiber.Ctx) error {
 
 }
 
+func (r *Repository) UpdateBook(context *fiber.Ctx) error {
+	id := context.Params("id")
+	if id == "" {
+		context.Status(http.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "id cannot be empty",
+		})
+		return nil
+	}
+
+	bookModel := &models.Books{}
+	err := r.DB.Where("id = ?", id).First(bookModel).Error
+	if err != nil {
+		context.Status(http.StatusBadRequest).JSON(&fiber.Map{
+			"message": "could not find the book",
+		})
+		return err
+	}
+
+	updateData := UpdateBookRequest{}
+	err = context.BodyParser(&updateData)
+	if err != nil {
+		context.Status(http.StatusUnprocessableEntity).JSON(&fiber.Map{
+			"message": "request failed",
+		})
+		return err
+	}
+
+	if updateData.Author != "" {
+		bookModel.Author = &updateData.Author
+	}
+	if updateData.Title != "" {
+		bookModel.Title = &updateData.Title
+	}
+	if updateData.Publisher != "" {
+		bookModel.Publisher = &updateData.Publisher
+	}
+
+	err = r.DB.Save(bookModel).Error
+	if err != nil {
+		context.Status(http.StatusBadRequest).JSON(&fiber.Map{
+			"message": "could not update the book",
+		})
+		return err
+	}
+
+	context.Status(http.StatusOK).JSON(&fiber.Map{
+		"message": "book updated successfully",
+		"data":    bookModel,
+	})
+	return nil
+}
+
 func (r *Repository) SetupRoutes(app *fiber.App) {
 	api := app.Group("/api")
 	api.Post("/create_books", r.CreateBook)
 	api.Delete("delete_book/:id", r.DeleteBook)
 	api.Get("/get_books/:id", r.GetBookByID)
 	api.Get("/books", r.GetBooks)
+	api.Patch("/update_book/:id", r.UpdateBook)
 }
 
 func main() {
